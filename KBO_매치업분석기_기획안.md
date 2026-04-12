@@ -13,11 +13,11 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 
 | 항목 | 내용 |
 |------|------|
-| 프로젝트명 | KBO 선발 매치업 분석기 (CLI) |
-| 실행 방법 | 터미널에 `kbo matchup` 입력 → 오늘 선발 매치업 분석 리포트 출력 |
+| 프로젝트명 | KBO 선발 매치업 분석기 |
+| 실행 방법 | `streamlit run app.py` → 브라우저에서 UI 조작 |
 | 자동화 | cron 등록 시 매일 오전 10시 자동 실행 (경기 없는 날 자동 스킵) |
-| 기술 난이도 | ★★★☆☆ (웹 파싱 + Claude API 연동 수준) |
-| 예상 소요 | 1~4단계 완성까지 약 2~3주 (주말 기준) |
+| 기술 난이도 | ★★★☆☆ (웹 파싱 + Claude API + Streamlit UI) |
+| 예상 소요 | 1~5단계 완성까지 약 2~3주 (주말 기준) |
 
 ---
 
@@ -29,10 +29,56 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 | 데이터 해석 | 스탯 나열 — 해석은 사용자 몫 | 투수 약점 × 타선 성향 교차 해석 |
 | 좌/우 매치업 | 없음 | 투수 좌/우 × 타선 좌/우 상대 OPS 조합 분석 |
 | 최근 폼 반영 | 시즌 누적 스탯 위주 | 최근 5경기 ERA·피안타율 별도 가중 반영 |
-| 팬 시각 커스터마이징 | 없음 | `--team 두산` 옵션으로 내 팀 기준 필터링 |
-| 팔로업 질문 | 불가 (정적 페이지) | 대화형 Q&A 가능 ("불펜 포함하면?") |
+| 팬 시각 커스터마이징 | 없음 | 사이드바에서 내 팀 선택 → 해당 팀 기준 필터링 |
+| 팔로업 질문 | 불가 (정적 페이지) | 채팅 입력창으로 추가 질문 가능 |
 | 불확실성 설명 | 없음 | 예측이 틀릴 수 있는 변수 명시 |
-| 사용 환경 | 웹 브라우저 | 터미널 CLI, cron 자동 실행 지원 |
+| 사용 환경 | 웹 브라우저 | Streamlit 웹 UI (로컬 or 배포 모두 가능) |
+
+---
+
+## 기술 스택 결정
+
+### 왜 Streamlit인가
+
+| | Streamlit | FastAPI + React |
+|--|-----------|-----------------|
+| 난이도 | ★☆☆☆☆ | ★★★★☆ |
+| Python 비중 | 100% | 백엔드 50% |
+| 이 프로젝트 적합도 | ★★★★★ | ★★★☆☆ |
+| 확장성 | 중간 | 높음 |
+
+- 스크래핑 + AI 분석 결과를 **보여주는** 게 핵심 → Streamlit이 최적
+- Python만으로 UI 완성, 별도 프론트 코드 없음
+- `streamlit run app.py` 한 줄로 실행
+- 나중에 FastAPI + React로 이식할 때도 **비즈니스 로직(스크래핑 + Claude)은 그대로 재사용** 가능
+
+---
+
+## 화면 구성 (Streamlit UI)
+
+```
+┌─────────────────────────────────────────────────┐
+│  ⚾ KBO 선발 매치업 분석기                         │
+│                                                   │
+│  [사이드바]          [메인 화면]                   │
+│  - 날짜 선택         오늘의 경기 목록 카드          │
+│  - 내 팀 선택        ┌──────────┐ ┌──────────┐   │
+│  - 분석 실행 버튼    │ 두산 vs  │ │ KIA vs   │   │
+│                      │  LG      │ │  삼성    │   │
+│                      └──────────┘ └──────────┘   │
+│                                                   │
+│                      [경기 선택 시]               │
+│                      투수 스탯 테이블              │
+│                      타선 성향 테이블              │
+│                      ─────────────────            │
+│                      🤖 Claude 해설               │
+│                      "오늘은 LG가 유리합니다.      │
+│                       이유는..."                  │
+│                                                   │
+│                      [추가 질문 입력창]            │
+│                      "불펜 포함하면?"  [전송]      │
+└─────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -86,6 +132,7 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 **세부 작업**
 - 수집 데이터 → 프롬프트 구성
 - "오늘 유리한 팀 + 이유" 분석 리포트 생성
+- 추가 질문 대화 처리
 
 **구현 방법**
 - Anthropic Python SDK (`claude-opus-4-6` 모델)
@@ -107,41 +154,54 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 3. 예상 스코어 범위 (예: 3~5점 경기)
 ```
 
-**결과물** : 분석 리포트 텍스트 (터미널 출력)
+**결과물** : 분석 리포트 텍스트
 
 ---
 
-### 5단계 — CLI 도구화 ★★☆☆☆
+### 5단계 — Streamlit UI 구성 ★★☆☆☆
 
 **세부 작업**
-- `kbo matchup` 명령어 등록
-- `--team` 옵션으로 팬 시각 커스터마이징
-- 경기 없는 날 자동 스킵
-- 컬러 출력 포맷
+- 사이드바: 날짜 선택, 내 팀 선택, 분석 실행 버튼
+- 메인: 오늘 경기 카드 목록
+- 경기 선택 시 투수/타선 스탯 테이블 출력
+- Claude 해설 텍스트 스트리밍 출력
+- 추가 질문 입력창 (채팅 형태)
 
 **구현 방법**
-- Python `click` 라이브러리
-- `~/.zshrc`에 alias 등록
-- `rich` 라이브러리로 터미널 컬러/테이블 출력
+```python
+import streamlit as st
 
-**결과물** : 실행 가능한 CLI 도구
+st.sidebar.selectbox("내 팀", KBO_TEAMS)
+if st.sidebar.button("오늘 분석 실행"):
+    games = fetch_today_games()
+    for game in games:
+        with st.expander(f"{game['home']} vs {game['away']}"):
+            st.dataframe(get_pitcher_stats(game))
+            st.write_stream(claude_analyze(game))  # 스트리밍 출력
+
+# 추가 질문
+if question := st.chat_input("추가 질문"):
+    st.chat_message("user").write(question)
+    st.chat_message("assistant").write_stream(claude_followup(question))
+```
+
+**결과물** : 브라우저에서 동작하는 웹 UI
 
 ---
 
 ### 6단계 — 자동화 (선택) ★☆☆☆☆
 
 **세부 작업**
-- 매일 오전 10시 자동 실행
+- 매일 오전 10시 데이터 자동 수집 & 캐싱
 - 경기 있는 날만 실행
-- 결과 파일 저장
 
 **구현 방법**
 ```bash
 # crontab -e
-0 10 * * * kbo matchup >> ~/kbo_log/$(date +\%Y-\%m-\%d).txt
+0 10 * * * cd ~/claudeCoding && python3 fetch_data.py
 ```
 
-**결과물** : 자동 실행 환경
+**결과물** : 앱 실행 시 이미 데이터가 준비된 상태
 
 ---
 
@@ -164,6 +224,5 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 | `requests` | HTTP 요청, JSON/HTML 수집 | `pip install requests` |
 | `beautifulsoup4` | HTML 파싱 (statiz 스탯 추출) | `pip install beautifulsoup4` |
 | `anthropic` | Claude API 호출 | `pip install anthropic` |
-| `click` | CLI 명령어 구성 | `pip install click` |
-| `rich` | 터미널 컬러/테이블 출력 | `pip install rich` |
-| cron | 자동 실행 스케줄링 | OS 내장 |
+| `streamlit` | 웹 UI 전체 구성 | `pip install streamlit` |
+| cron | 데이터 자동 수집 스케줄링 | OS 내장 |
