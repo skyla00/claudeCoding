@@ -82,6 +82,38 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 
 ---
 
+## 디렉토리 구조
+
+```
+KBOSearch/
+│
+├── app.py                  # Streamlit 진입점
+│
+├── crawlers/               # 크롤링 담당 (1~3단계)
+│   ├── __init__.py
+│   ├── schedule.py         # 오늘 경기 일정 + 선발 투수 (statiz)
+│   ├── pitcher.py          # 투수 스탯 수집 (statiz)
+│   └── lineup.py           # 팀 타선 성향 수집 (statiz)
+│
+├── analysis/               # Claude 연동 담당 (4단계)
+│   ├── __init__.py
+│   ├── prompt.py           # 프롬프트 템플릿 관리
+│   └── claude.py           # Claude API 호출
+│
+├── cache/                  # 로컬 캐시 저장소 (자동 생성)
+│   └── .gitkeep
+│
+├── requirements.txt        # 의존성
+└── .env.example            # API 키 예시 (ANTHROPIC_API_KEY)
+```
+
+- `crawlers/` — 데이터 수집만 담당, 각 파일이 독립적
+- `analysis/` — Claude 호출만 담당, crawlers 결과를 받아서 처리
+- `app.py` — 위 두 모듈을 조립해서 Streamlit UI로 보여줌
+- `cache/` — statiz 파싱 결과를 JSON으로 저장 (1일 유지)
+
+---
+
 ## 단계별 구현 계획
 
 ### 1단계 — 데이터 수집 (경기 일정) ★★☆☆☆
@@ -91,8 +123,8 @@ statiz.co.kr/prediction 이 이미 승률 % 예측을 제공하고 있음.
 - 선발 투수 이름 추출
 
 **구현 방법**
-- 네이버 스포츠 내부 JSON API (브라우저 개발자 도구 Network 탭으로 엔드포인트 확인)
-- `requests` + json 파싱
+- `statiz.co.kr/prediction` HTML 파싱 (BeautifulSoup)
+- 경기 목록 + 선발 투수 한 번에 추출
 
 **결과물** : 오늘 경기 목록 + 선발 투수명 JSON
 
@@ -209,7 +241,7 @@ if question := st.chat_input("추가 질문"):
 
 | 데이터 종류 | 출처 | 수집 방법 | 업데이트 주기 |
 |-------------|------|-----------|--------------|
-| 오늘 경기 일정 & 선발 투수 | 네이버 스포츠 내부 JSON | requests JSON 호출 | 당일 실시간 |
+| 오늘 경기 일정 & 선발 투수 | statiz.co.kr/prediction | BeautifulSoup HTML 파싱 | 당일 실시간 |
 | 투수 스탯 (ERA·WHIP 등) | statiz.co.kr | BeautifulSoup 파싱, 로컬 캐싱 | 매일 갱신 |
 | 팀 타선 성향 (OPS·wRC+) | statiz.co.kr 팀 스탯 | 동일 파싱, 좌/우 구분 | 매일 갱신 |
 | 최근 폼 (최근 N경기) | statiz.co.kr 게임로그 | 게임로그 페이지 파싱 | 당일 기준 |
