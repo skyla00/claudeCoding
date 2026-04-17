@@ -12,3 +12,4 @@
 |------|------|
 | 2026-04-12 | KBO 선발 매치업 분석기 기획 — statiz 기반, Streamlit UI, 데이터 소스 통일 |
 | 2026-04-16 | KBOSearch 프로젝트 구조 생성 + 크롤링 3종 완성 (schedule / pitcher / lineup) + Claude API 연동 (prompt / claude) |
+| 2026-04-17 | Gemini API 연동 (gemini-2.5-flash-lite) + Streamlit UI 완성 (app.py) — 경기 선택 → 스트리밍 분석 출력 |
