@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 *.xlsx
+blog-write/drafts/
+blog-write/.cookies.json
+blog-write/.velog_cookies.json

@@ -37,6 +37,7 @@ def analyze(prompt: str, retries: int = 3) -> str:
                 config=genai.types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
                     max_output_tokens=1024,
+                    temperature=0.0,
                 ),
             )
             return response.text
@@ -58,6 +59,7 @@ def analyze_stream(prompt: str):
         config=genai.types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=1024,
+            temperature=0.0,
         ),
     ):
         if chunk.text:
