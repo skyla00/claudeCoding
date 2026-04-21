@@ -15,7 +15,15 @@ playwright install chromium
 
 ### 2. .env 설정
 
-프로젝트 루트(`claudeCoding/.env`)에 아래 항목 추가:
+`blog-write/` 폴더의 **한 단계 위 폴더**에 `.env` 파일 추가:
+
+```
+프로젝트폴더/
+├── .env              ← 여기
+├── blog-write/
+│   └── velog.py
+└── venv/
+```
 
 ```
 VELOG_REFRESH_TOKEN=브라우저에서_복사한_값
@@ -36,7 +44,7 @@ VELOG_USERNAME=벨로그아이디  # @ 없이, 예: skyla00
 ### 기본 포스팅
 
 ```bash
-cd claudeCoding
+cd 프로젝트폴더
 source venv/bin/activate
 python3 blog-write/velog.py --title "제목" --content "내용"
 ```
