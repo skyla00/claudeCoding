@@ -73,16 +73,55 @@ python3 blog-write/velog.py --title "제목" --file blog-write/drafts/날짜.md 
 
 ---
 
-## 초안 작성 워크플로우
+## /blog 자동화 워크플로우 (Claude Code 사용 시)
 
-1. `blog-write/template.md`를 참고해서 `blog-write/drafts/YYYY-MM-DD.md` 작성
-2. 파일 수정 후 포스팅:
+Claude Code에서 `/blog` 커맨드를 사용하면 초안 작성부터 포스팅까지 자동화된다.
+
+### /blog 커맨드 만들기
+
+`~/.claude/commands/blog.md` 파일 생성:
 
 ```bash
-python3 blog-write/velog.py \
-  --title "[클로드 코딩] N. 제목" \
-  --file blog-write/drafts/YYYY-MM-DD.md \
-  --tags "개발,클로드,Python"
+mkdir -p ~/.claude/commands
+```
+
+아래 내용을 `~/.claude/commands/blog.md`에 저장:
+
+```markdown
+# /blog — Velog 블로그 포스팅 자동화
+
+오늘 작업을 마무리할 때 블로그 초안을 파일로 작성하고 Velog에 포스팅한다.
+
+## 순서
+
+1. **초안 파일 작성**
+   - 오늘 대화 내용을 바탕으로 아래 구조로 초안 작성
+   - 파일 경로: `blog-write/drafts/YYYY-MM-DD.md` (오늘 날짜)
+   - `blog-write/template.md` 참고해서 동일한 구조와 말투로 작성
+   - 작성 완료 후: "파일 확인해줘. 수정 후 '확정'이라고 하면 Velog에 올릴게."
+
+2. **사용자 확정**
+   - 파일을 열어서 직접 수정
+   - "확정" 메시지 받으면 다음 단계 진행
+
+3. **Velog 포스팅**
+   - 파일에서 제목(첫 번째 # 헤더) 추출
+   - velog.py로 자동 포스팅
+   - 완료 후 URL 전달
+
+## 주의사항
+- 초안은 반드시 사용자 확인을 받은 후 포스팅한다
+- 코드 스니펫은 마크다운 코드블록으로 포함
+```
+
+### /blog 사용 흐름
+
+```
+Claude Code 터미널에서 /blog 입력
+  → drafts/YYYY-MM-DD.md 자동 생성
+  → 파일 열어서 수정
+  → "확정" 입력
+  → Velog 자동 포스팅 + URL 반환
 ```
 
 > drafts/ 폴더는 .gitignore에 등록되어 있어 git에 올라가지 않음.
