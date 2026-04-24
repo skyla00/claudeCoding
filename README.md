@@ -6,6 +6,9 @@
 
 ---
 
+## 블로그
+https://velog.io/@skyla00/posts
+
 ## 기록
 
 | 날짜 | 내용 |
