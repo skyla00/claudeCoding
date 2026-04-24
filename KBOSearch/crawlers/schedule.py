@@ -1,116 +1,161 @@
+"""
+KBO 공식 사이트에서 경기 일정 + 선발 투수 파싱.
+- /Schedule/Schedule.aspx?gameDate=YYYYMMDD  →  경기 목록
+- /Schedule/GameCenter/Main.aspx?...&section=START_PIT  →  선발 투수 이름
+"""
 import re
-import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 
-BASE_URL = "https://statiz.co.kr/prediction/"
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+from crawlers.kbo_playwright import fetch_html, fetch_multiple_html
 
-
-def get_target_date(date_str: str | None = None) -> str:
-    """날짜 문자열 반환. 기본값: 어제 날짜 (YYYY-MM-DD)"""
-    if date_str:
-        return date_str
-    yesterday = datetime.today() - timedelta(days=1)
-    return yesterday.strftime("%Y-%m-%d")
+BASE = "https://www.koreabaseball.com"
 
 
 def fetch_game_list(date_str: str | None = None) -> list[dict]:
     """
-    statiz prediction 페이지에서 경기 목록 + 선발 투수 파싱.
+    특정 날짜의 KBO 경기 목록 반환.
+
+    Args:
+        date_str: "YYYY-MM-DD" 형식. None이면 오늘.
 
     Returns:
         [
             {
-                "s_no": "20260071",
-                "date": "2026-04-12",
-                "away": "롯데",
-                "home": "LG",
-                "time": "18:30",
-                "away_pitcher": "나균안",
-                "home_pitcher": "송승기",
+                "game_id": "20260424LGOB0",
+                "date":    "2026-04-24",
+                "away":    "LG",
+                "home":    "두산",
+                "time":    "18:30",
+                "away_pitcher": "임찬규",
+                "home_pitcher": "최승용",
             },
             ...
         ]
     """
-    date = get_target_date(date_str)
-    g_date = date.replace("-", "")  # YYYYMMDD 형식
-    res = requests.get(BASE_URL, params={"g_date": g_date}, headers=HEADERS, timeout=10)
-    res.raise_for_status()
+    if not date_str:
+        date_str = datetime.today().strftime("%Y-%m-%d")
 
-    soup = BeautifulSoup(res.text, "html.parser")
+    g_date = date_str.replace("-", "")   # YYYYMMDD
+    # MM.DD 형식으로 날짜 행 매칭
+    target_md = f"{date_str[5:7]}.{date_str[8:]}"  # "04.24"
+
+    sched_url = f"{BASE}/Schedule/Schedule.aspx?gameDate={g_date}"
+    html = fetch_html(sched_url)
+    games = _parse_schedule(html, date_str, target_md)
+
+    if not games:
+        return []
+
+    # 선발 투수 조회 (START_PIT 섹션)
+    pit_urls = [
+        f"{BASE}/Schedule/GameCenter/Main.aspx"
+        f"?gameDate={g_date}&gameId={g['game_id']}&section=START_PIT"
+        for g in games
+    ]
+    pit_htmls = fetch_multiple_html(pit_urls)
+
+    # pitcher 모듈에 스탯 사전 캐시 (이후 fetch_pitcher_stats 호출 시 Playwright 불필요)
+    from crawlers import pitcher as pitcher_mod
+
+    for g, pit_html in zip(games, pit_htmls):
+        away_p, home_p = _parse_starters(pit_html)
+        g["away_pitcher"] = away_p
+        g["home_pitcher"] = home_p
+        pitcher_mod._cache_stats(g["game_id"], pit_html)
+
+    return games
+
+
+def _parse_schedule(html: str, date_str: str, target_md: str) -> list[dict]:
+    """경기 일정 테이블에서 target_md 날짜의 경기 파싱."""
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.find("table")
+    if not table:
+        return []
+
     games = []
+    in_target = False
 
-    for slide in soup.select("div.swiper-slide.item"):
-        # s_no 추출
-        anchor = slide.select_one("a")
-        if not anchor:
-            continue
-        match = re.search(r"s_no=(\d+)", anchor.get("onclick", ""))
-        if not match:
-            continue
-        s_no = match.group(1)
+    for row in table.find_all("tr")[1:]:   # 헤더 제외
+        # 날짜 셀이 있으면 날짜 갱신
+        day_td = row.find("td", class_="day")
+        if day_td:
+            day_text = day_td.get_text(strip=True)   # "04.24(금)"
+            in_target = day_text.startswith(target_md)
 
-        # 팀명 (away=첫 번째 li, home=두 번째 li)
-        teams = slide.select("div.tname")
-        if len(teams) < 2:
+        if not in_target:
             continue
-        away = teams[0].get_text(strip=True)
-        home = teams[1].get_text(strip=True)
+
+        play_td = row.find("td", class_="play")
+        relay_td = row.find("td", class_="relay")
+        if not play_td or not relay_td:
+            continue
+
+        # 팀명: 첫 번째·마지막 span
+        spans = play_td.find_all("span", recursive=False)
+        if len(spans) < 2:
+            continue
+        away = spans[0].get_text(strip=True)
+        home = spans[-1].get_text(strip=True)
 
         # 경기 시간
-        time_tag = slide.select_one("div.g_info span")
-        time_str = time_tag.get_text(strip=True) if time_tag else ""
+        time_td = row.find("td", class_="time")
+        time_str = time_td.get_text(strip=True) if time_td else ""
 
-        # 선발 투수 (개별 경기 페이지)
-        away_pitcher, home_pitcher = fetch_starters(s_no)
+        # game_id (href에서 추출)
+        anchor = relay_td.find("a")
+        if not anchor:
+            continue
+        href = anchor.get("href", "")
+        m = re.search(r"gameId=([A-Z0-9]+)", href)
+        if not m:
+            continue
+        game_id = m.group(1)
 
         games.append({
-            "s_no": s_no,
-            "date": date,
-            "away": away,
-            "home": home,
-            "time": time_str,
-            "away_pitcher": away_pitcher,
-            "home_pitcher": home_pitcher,
+            "game_id":      game_id,
+            "date":         date_str,
+            "away":         away,
+            "home":         home,
+            "time":         time_str,
+            "away_pitcher": "미정",
+            "home_pitcher": "미정",
         })
 
     return games
 
 
-def fetch_starters(s_no: str) -> tuple[str, str]:
-    """경기 상세 페이지에서 선발 투수 이름 반환 (away, home)"""
-    res = requests.get(BASE_URL, params={"s_no": s_no}, headers=HEADERS, timeout=10)
-    res.raise_for_status()
-
-    soup = BeautifulSoup(res.text, "html.parser")
-    player_box = soup.find("div", class_="player_box")
-    if not player_box:
+def _parse_starters(html: str) -> tuple[str, str]:
+    """START_PIT HTML에서 선발 투수 이름 (원정, 홈) 반환."""
+    if not html:
         return "미정", "미정"
-
-    names = [tag.get_text(strip=True) for tag in player_box.select("div.name")]
-    away_pitcher = names[0] if len(names) > 0 else "미정"
-    home_pitcher = names[1] if len(names) > 1 else "미정"
-    return away_pitcher, home_pitcher
+    soup = BeautifulSoup(html, "html.parser")
+    pit_tds = [td for td in soup.find_all("td", class_="pitcher")]
+    names = []
+    for td in pit_tds:
+        span = td.select_one("span.name")
+        if span:
+            names.append(span.get_text(strip=True))
+    return (
+        names[0] if len(names) > 0 else "미정",
+        names[1] if len(names) > 1 else "미정",
+    )
 
 
 if __name__ == "__main__":
-    import argparse
-    import json
+    import argparse, json
 
-    parser = argparse.ArgumentParser(description="KBO 경기 일정 + 선발 투수 조회")
-    parser.add_argument(
-        "--date",
-        type=str,
-        default=None,
-        help="조회할 날짜 (YYYY-MM-DD). 기본값: 어제",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--date", default=None, help="YYYY-MM-DD (기본: 오늘)")
     args = parser.parse_args()
 
     games = fetch_game_list(args.date)
-
     if not games:
         print("경기 없음")
     else:
         for g in games:
-            print(f"[{g['date']}] {g['away']}({g['away_pitcher']}) vs {g['home']}({g['home_pitcher']})  {g['time']}")
+            print(
+                f"[{g['date']}] {g['away']}({g['away_pitcher']}) "
+                f"vs {g['home']}({g['home_pitcher']})  {g['time']}  [{g['game_id']}]"
+            )

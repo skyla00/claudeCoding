@@ -3,3 +3,4 @@ beautifulsoup4
 streamlit
 anthropic
 google-genai
+playwright

@@ -6,3 +6,4 @@ __pycache__/
 blog-write/drafts/
 blog-write/.cookies.json
 blog-write/.velog_cookies.json
+.statiz_cookies.json

@@ -10,7 +10,7 @@ from analysis.prompt import SYSTEM_PROMPT
 MODEL = "claude-sonnet-4-6"
 
 # .env 파일 직접 로드
-_env_path = Path(__file__).resolve().parent.parent / ".env"
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 if _env_path.exists():
     for line in _env_path.read_text().splitlines():
         if "=" in line and not line.startswith("#"):
@@ -78,8 +78,8 @@ if __name__ == "__main__":
     g = games[args.game]
     print(f"\n분석 중: {g['away']} vs {g['home']} ...\n")
 
-    pitcher_stats = fetch_pitcher_stats(g["s_no"])
-    lineup = fetch_lineup(g["s_no"])
+    pitcher_stats = fetch_pitcher_stats(g["game_id"])
+    lineup = fetch_lineup(g["away"], g["home"])
     prompt = build_prompt(g, pitcher_stats, lineup, my_team=args.team)
 
     print("=" * 50)
