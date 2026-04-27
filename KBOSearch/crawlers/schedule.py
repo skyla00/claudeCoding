@@ -7,12 +7,13 @@ import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 
+from crawlers.gamecenter import parse_starting_pitcher_names
 from crawlers.kbo_playwright import fetch_html, fetch_multiple_html
+from crawlers.types import Game
+from crawlers.urls import game_center_url, schedule_url
 
-BASE = "https://www.koreabaseball.com"
 
-
-def fetch_game_list(date_str: str | None = None) -> list[dict]:
+def fetch_game_list(date_str: str | None = None) -> list[Game]:
     """
     특정 날짜의 KBO 경기 목록 반환.
 
@@ -40,7 +41,7 @@ def fetch_game_list(date_str: str | None = None) -> list[dict]:
     # MM.DD 형식으로 날짜 행 매칭
     target_md = f"{date_str[5:7]}.{date_str[8:]}"  # "04.24"
 
-    sched_url = f"{BASE}/Schedule/Schedule.aspx?gameDate={g_date}"
+    sched_url = schedule_url(g_date)
     html = fetch_html(sched_url)
     games = _parse_schedule(html, date_str, target_md)
 
@@ -49,8 +50,7 @@ def fetch_game_list(date_str: str | None = None) -> list[dict]:
 
     # 선발 투수 조회 (START_PIT 섹션)
     pit_urls = [
-        f"{BASE}/Schedule/GameCenter/Main.aspx"
-        f"?gameDate={g_date}&gameId={g['game_id']}&section=START_PIT"
+        game_center_url(g_date, g["game_id"], "START_PIT")
         for g in games
     ]
     pit_htmls = fetch_multiple_html(pit_urls)
@@ -67,7 +67,7 @@ def fetch_game_list(date_str: str | None = None) -> list[dict]:
     return games
 
 
-def _parse_schedule(html: str, date_str: str, target_md: str) -> list[dict]:
+def _parse_schedule(html: str, date_str: str, target_md: str) -> list[Game]:
     """경기 일정 테이블에서 target_md 날짜의 경기 파싱."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
@@ -131,16 +131,7 @@ def _parse_starters(html: str) -> tuple[str, str]:
     if not html:
         return "미정", "미정"
     soup = BeautifulSoup(html, "html.parser")
-    pit_tds = [td for td in soup.find_all("td", class_="pitcher")]
-    names = []
-    for td in pit_tds:
-        span = td.select_one("span.name")
-        if span:
-            names.append(span.get_text(strip=True))
-    return (
-        names[0] if len(names) > 0 else "미정",
-        names[1] if len(names) > 1 else "미정",
-    )
+    return parse_starting_pitcher_names(soup)
 
 
 if __name__ == "__main__":

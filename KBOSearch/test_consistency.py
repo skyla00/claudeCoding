@@ -11,7 +11,7 @@ from crawlers.schedule import fetch_game_list
 from crawlers.pitcher import fetch_pitcher_stats
 from crawlers.lineup import fetch_lineup
 from analysis.prompt import build_prompt
-from analysis.gemini import analyze
+from analysis.provider import analyze
 
 REPEAT = 3  # 경기당 반복 횟수
 
@@ -60,6 +60,8 @@ def compare_runs(matchup: str, runs: list[str]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", default=None, help="날짜 (YYYY-MM-DD), 기본값: 오늘")
+    parser.add_argument("--game", type=int, default=None, help="분석할 경기 번호 (0부터). 없으면 전체 경기")
+    parser.add_argument("--repeat", type=int, default=REPEAT, help=f"경기당 반복 횟수 (기본: {REPEAT})")
     args = parser.parse_args()
 
     from datetime import datetime
@@ -76,18 +78,23 @@ if __name__ == "__main__":
     for i, g in enumerate(games):
         print(f"  [{i}] {g['away']} vs {g['home']}")
 
-    print(f"\n총 {len(games)}경기 × {REPEAT}회 반복 분석 시작\n")
+    if args.game is not None:
+        if args.game < 0 or args.game >= len(games):
+            raise SystemExit(f"--game은 0부터 {len(games) - 1} 사이여야 함")
+        games = [games[args.game]]
+
+    print(f"\n총 {len(games)}경기 × {args.repeat}회 반복 분석 시작\n")
 
     for g in games:
         matchup = f"{g['away']} vs {g['home']}"
         print(f"\n데이터 수집: {matchup}...")
-        pitcher_stats = fetch_pitcher_stats(g["s_no"])
-        lineup = fetch_lineup(g["s_no"])
+        pitcher_stats = fetch_pitcher_stats(g["game_id"])
+        lineup = fetch_lineup(g["away"], g["home"])
         prompt = build_prompt(g, pitcher_stats, lineup)
 
         runs = []
-        for i in range(REPEAT):
-            print(f"  분석 {i+1}/{REPEAT}...")
+        for i in range(args.repeat):
+            print(f"  분석 {i+1}/{args.repeat}...")
             result = analyze(prompt)
             runs.append(result)
 

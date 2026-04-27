@@ -1,4 +1,5 @@
 from crawlers.player_stats import CURRENT_YEAR
+from crawlers.types import Game, LineupResponse, PitcherStatsResponse, RecentGame
 
 SYSTEM_PROMPT = """
 너는 KBO 야구 전문 분석가야.
@@ -21,10 +22,10 @@ SYSTEM_PROMPT = """
 
 
 def build_prompt(
-    game: dict,
-    pitcher_stats: dict,
-    lineup: dict,
-    recent_games: dict | None = None,
+    game: Game,
+    pitcher_stats: PitcherStatsResponse,
+    lineup: LineupResponse,
+    recent_games: dict[str, list[RecentGame]] | None = None,
     my_team: str | None = None,
 ) -> str:
     """
@@ -51,7 +52,7 @@ def build_prompt(
             return "  정보 없음"
         return "\n".join(f"  - {h['name']} (OPS {h['OPS']})" for h in hitters)
 
-    def fmt_pitcher_history(label: str, p: dict, away_name: str, home_name: str) -> str:
+    def fmt_pitcher_history(label: str, p: PitcherStatsResponse, away_name: str, home_name: str) -> str:
         """선발 투수 연도별 비교 마크다운 테이블 생성."""
         ah = p["away"].get("history", {})
         hh = p["home"].get("history", {})

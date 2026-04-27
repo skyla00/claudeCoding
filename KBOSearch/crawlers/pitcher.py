@@ -8,10 +8,11 @@ KBO 게임센터 START_PIT 섹션에서 선발 투수 스탯 크롤링.
   fetch_pitcher_stats()는 Playwright 호출 없이 즉시 반환함.
 """
 from bs4 import BeautifulSoup
+from crawlers.gamecenter import parse_pitcher_infos_from_selected_card
 from crawlers.kbo_playwright import fetch_html
 from crawlers.player_stats import get_pitcher_stats, CURRENT_YEAR, PREV_YEAR
-
-BASE = "https://www.koreabaseball.com"
+from crawlers.types import PitcherStatsResponse
+from crawlers.urls import game_center_url
 
 # START_PIT 테이블 컬럼 → 내부 키 매핑
 _COL_MAP = {
@@ -24,7 +25,7 @@ _COL_MAP = {
 }
 
 # 프로세스 내 사전 캐시 (schedule.fetch_game_list에서 미리 채워짐)
-_stats_cache: dict[str, dict] = {}
+_stats_cache: dict[str, PitcherStatsResponse] = {}
 
 
 def _cache_stats(game_id: str, html: str) -> None:
@@ -32,7 +33,7 @@ def _cache_stats(game_id: str, html: str) -> None:
     _stats_cache[game_id] = _parse(html)
 
 
-def fetch_pitcher_stats(game_id: str) -> dict:
+def fetch_pitcher_stats(game_id: str) -> PitcherStatsResponse:
     """
     game_id로 선발 투수 스탯 조회.
 
@@ -56,10 +57,7 @@ def fetch_pitcher_stats(game_id: str) -> dict:
         return result
 
     date = game_id[:8]
-    url = (
-        f"{BASE}/Schedule/GameCenter/Main.aspx"
-        f"?gameDate={date}&gameId={game_id}&section=START_PIT"
-    )
+    url = game_center_url(date, game_id, "START_PIT")
     html = fetch_html(url)
     result = _parse(html)
     result = _attach_history(result)
@@ -67,7 +65,7 @@ def fetch_pitcher_stats(game_id: str) -> dict:
     return result
 
 
-def _parse(html: str) -> dict:
+def _parse(html: str) -> PitcherStatsResponse:
     if not html:
         return {"away": {"name": "미정"}, "home": {"name": "미정"}}
 
@@ -85,6 +83,8 @@ def _parse(html: str) -> dict:
                 "name":   name_span.get_text(strip=True),
                 "record": record_text,
             })
+    if len(names_info) < 2:
+        names_info = parse_pitcher_infos_from_selected_card(soup)
 
     # ── 2. 스탯 테이블 ────────────────────────────────────────────────────
     table = soup.find("table")
@@ -114,7 +114,7 @@ def _parse(html: str) -> dict:
     return {"away": away, "home": home}
 
 
-def _attach_history(result: dict) -> dict:
+def _attach_history(result: PitcherStatsResponse) -> PitcherStatsResponse:
     """fetch_pitcher_stats 결과에 연도별 히스토리 추가."""
     for side in ("away", "home"):
         pitcher = result.get(side, {})

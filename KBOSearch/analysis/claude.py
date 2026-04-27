@@ -1,24 +1,20 @@
 import os
 import sys
+import logging
 import anthropic
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from analysis.config import CLAUDE_MODEL as MODEL
+from analysis.config import load_env
 from analysis.prompt import SYSTEM_PROMPT
 
-MODEL = "claude-sonnet-4-6"
-
-# .env 파일 직접 로드
-_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-if _env_path.exists():
-    for line in _env_path.read_text().splitlines():
-        if "=" in line and not line.startswith("#"):
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+logger = logging.getLogger(__name__)
 
 
 def get_client() -> anthropic.Anthropic:
+    load_env()
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise EnvironmentError("ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. .env 파일을 확인하세요.")
@@ -28,26 +24,34 @@ def get_client() -> anthropic.Anthropic:
 def analyze(prompt: str) -> str:
     """프롬프트를 Claude에 전달하고 분석 결과 반환"""
     client = get_client()
-    message = client.messages.create(
-        model=MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return message.content[0].text
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
+    except Exception:
+        logger.exception("Claude analyze failed")
+        raise
 
 
 def analyze_stream(prompt: str):
     """스트리밍 방식으로 분석 결과 생성 (Streamlit용)"""
     client = get_client()
-    with client.messages.stream(
-        model=MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            yield text
+    try:
+        with client.messages.stream(
+            model=MODEL,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+    except Exception:
+        logger.exception("Claude stream failed")
+        raise
 
 
 if __name__ == "__main__":

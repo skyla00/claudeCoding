@@ -1,45 +1,24 @@
 """연도별 선수 스탯 조회 + FIP 계산."""
 from __future__ import annotations
+import logging
 from functools import lru_cache
 from datetime import datetime
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+
+from crawlers.kbo_playwright import fetch_html_with_select
+from crawlers.urls import PLAYER_HITTER_URL, PLAYER_PITCHER_URL
+
+logger = logging.getLogger(__name__)
 
 CURRENT_YEAR = datetime.today().year
 PREV_YEAR = CURRENT_YEAR - 1
 
-BASE = "https://www.koreabaseball.com"
-_PIT_URL = f"{BASE}/Record/Player/PitcherBasic/Basic1.aspx"
-_BAT_URL = f"{BASE}/Record/Player/HitterBasic/Basic2.aspx"
 _SEL = "cphContents_cphContents_cphContents_ddlSeason_ddlSeason"
 
 
 def _fetch_with_year(url: str, year: int) -> str:
     """Playwright로 연도 드롭다운 선택 후 HTML 반환."""
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        try:
-            page.goto(url, timeout=15000)
-            page.wait_for_load_state("networkidle", timeout=10000)
-
-            # 현재 선택된 연도 확인 후, 다를 때만 변경
-            try:
-                current_val = page.locator(f"#{_SEL}").input_value()
-                if current_val != str(year):
-                    page.select_option(f"#{_SEL}", str(year))
-                    # ASP.NET UpdatePanel이 AJAX 응답 후 DOM 업데이트하는 시간 대기
-                    page.wait_for_load_state("networkidle", timeout=10000)
-                    page.wait_for_timeout(2000)
-            except Exception:
-                pass
-
-            html = page.content()
-        except Exception:
-            html = ""
-        finally:
-            browser.close()
-    return html
+    return fetch_html_with_select(url, _SEL, str(year), timeout=15000)
 
 
 def _parse_table(html: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -80,14 +59,14 @@ def _parse_table(html: str) -> tuple[list[str], dict[str, list[str]]]:
 @lru_cache(maxsize=8)
 def _pitcher_table(year: int) -> tuple[list[str], dict[str, list[str]]]:
     """투수 스탯 테이블 fetch (lru_cache)."""
-    html = _fetch_with_year(_PIT_URL, year)
+    html = _fetch_with_year(PLAYER_PITCHER_URL, year)
     return _parse_table(html)
 
 
 @lru_cache(maxsize=8)
 def _batter_table(year: int) -> tuple[list[str], dict[str, list[str]]]:
     """타자 스탯 테이블 fetch (lru_cache)."""
-    html = _fetch_with_year(_BAT_URL, year)
+    html = _fetch_with_year(PLAYER_HITTER_URL, year)
     return _parse_table(html)
 
 
@@ -174,6 +153,7 @@ def get_pitcher_stats(name: str, year: int) -> dict:
         }
         return result
     except Exception:
+        logger.exception("Failed to get pitcher stats: name=%s year=%s", name, year)
         return {}
 
 
@@ -202,4 +182,5 @@ def get_batter_stats(name: str, year: int) -> dict:
         }
         return result
     except Exception:
+        logger.exception("Failed to get batter stats: name=%s year=%s", name, year)
         return {}

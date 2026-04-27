@@ -1,24 +1,20 @@
 import os
 import sys
+import logging
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from google import genai
+from analysis.config import GEMINI_MODEL as MODEL
+from analysis.config import load_env
 from analysis.prompt import SYSTEM_PROMPT
 
-MODEL = "gemini-2.5-flash-lite"
-
-# .env 파일 직접 로드
-_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-if _env_path.exists():
-    for line in _env_path.read_text().splitlines():
-        if "=" in line and not line.startswith("#"):
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+logger = logging.getLogger(__name__)
 
 
 def get_client() -> genai.Client:
+    load_env()
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise EnvironmentError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다. .env 파일을 확인하세요.")
@@ -43,9 +39,10 @@ def analyze(prompt: str, retries: int = 3) -> str:
             return response.text
         except Exception as e:
             if "503" in str(e) and attempt < retries - 1:
-                print(f"서버 과부하, {5}초 후 재시도... ({attempt + 1}/{retries})")
+                logger.warning("Gemini 503 retry: attempt=%s/%s", attempt + 1, retries)
                 time.sleep(5)
             else:
+                logger.exception("Gemini analyze failed")
                 raise
     return ""
 
@@ -53,17 +50,21 @@ def analyze(prompt: str, retries: int = 3) -> str:
 def analyze_stream(prompt: str):
     """스트리밍 방식으로 분석 결과 생성 (Streamlit용)"""
     client = get_client()
-    for chunk in client.models.generate_content_stream(
-        model=MODEL,
-        contents=prompt,
-        config=genai.types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            max_output_tokens=1024,
-            temperature=0.0,
-        ),
-    ):
-        if chunk.text:
-            yield chunk.text
+    try:
+        for chunk in client.models.generate_content_stream(
+            model=MODEL,
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=1024,
+                temperature=0.0,
+            ),
+        ):
+            if chunk.text:
+                yield chunk.text
+    except Exception:
+        logger.exception("Gemini stream failed")
+        raise
 
 
 if __name__ == "__main__":

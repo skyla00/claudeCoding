@@ -1,4 +1,5 @@
 import sys
+import logging
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -11,11 +12,17 @@ from crawlers.pitcher import fetch_pitcher_stats
 from crawlers.lineup import fetch_lineup
 from crawlers.recent_games import fetch_recent_games
 from crawlers.player_stats import CURRENT_YEAR, PREV_YEAR
+from crawlers.types import Game, LineupResponse, PitcherStatsResponse, RecentGame
 from analysis.prompt import build_prompt
-from analysis.gemini import analyze_stream
+from analysis.provider import analyze_stream
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="KBO 매치업 분석기", page_icon="⚾", layout="centered")
 st.title("⚾ KBO 선발 매치업 분석기")
+
+DATA_CACHE_VERSION = "2026-04-27-p2-parallel-progressive-v3"
 
 # 사이드바
 with st.sidebar:
@@ -26,39 +33,30 @@ with st.sidebar:
 
 # 경기 목록 로드
 @st.cache_data(ttl=300)
-def load_games(date_str):
+def load_games(date_str: str, cache_version: str) -> list[Game]:
     # fetch_game_list 내부에서 START_PIT HTML을 수집하면서
     # pitcher._stats_cache에 스탯을 미리 저장함 → 경기 선택 시 Playwright 재호출 없음
-    games = fetch_game_list(date_str)
-    # player stats 테이블 사전 로드 (게임 선택 시 즉시 반환)
-    from crawlers.player_stats import _pitcher_table, _batter_table, CURRENT_YEAR, PREV_YEAR
-    try:
-        _pitcher_table(CURRENT_YEAR)
-        _pitcher_table(PREV_YEAR)
-        _batter_table(CURRENT_YEAR)
-        _batter_table(PREV_YEAR)
-    except Exception:
-        pass
-    return games
+    return fetch_game_list(date_str)
 
 @st.cache_data(ttl=3600)
-def load_pitcher_stats(game_id):
+def load_pitcher_stats(game_id: str, cache_version: str) -> PitcherStatsResponse:
     # pitcher._stats_cache에 이미 있으면 즉시 반환 (load_games 이후)
     return fetch_pitcher_stats(game_id)
 
 @st.cache_data(ttl=3600)
-def load_lineup(away, home):
+def load_lineup(away: str, home: str, cache_version: str) -> LineupResponse:
     # 내부 _fetch_all_raw()는 lru_cache로 최초 1회만 Playwright 호출
     return fetch_lineup(away, home)
 
 @st.cache_data(ttl=3600)
-def load_recent_games(team_name, date_str):
+def load_recent_games(team_name: str, date_str: str, cache_version: str) -> list[RecentGame]:
     return fetch_recent_games(team_name, n=5, before_date=date_str)
 
 with st.spinner("경기 목록 불러오는 중..."):
     try:
-        games = load_games(date_str)
+        games = load_games(date_str, DATA_CACHE_VERSION)
     except Exception as e:
+        logger.exception("Failed to load games: date=%s", date_str)
         st.error(f"경기 목록 로드 실패: {e}")
         games = []
 
@@ -91,14 +89,15 @@ if st.session_state.selected_game is not None:
 
     with st.spinner("데이터 수집 중..."):
         try:
-            pitcher_stats = load_pitcher_stats(g["game_id"])
-            lineup = load_lineup(g["away"], g["home"])
+            pitcher_stats = load_pitcher_stats(g["game_id"], DATA_CACHE_VERSION)
+            lineup = load_lineup(g["away"], g["home"], DATA_CACHE_VERSION)
             recent = {
-                "away": load_recent_games(g["away"], date_str),
-                "home": load_recent_games(g["home"], date_str),
+                "away": load_recent_games(g["away"], date_str, DATA_CACHE_VERSION),
+                "home": load_recent_games(g["home"], date_str, DATA_CACHE_VERSION),
             }
             prompt = build_prompt(g, pitcher_stats, lineup, recent_games=recent, my_team=my_team or None)
         except Exception as e:
+            logger.exception("Failed to collect data: game_id=%s", g.get("game_id"))
             st.error(f"데이터 수집 실패: {e}")
             st.stop()
 
@@ -111,6 +110,7 @@ if st.session_state.selected_game is not None:
             full_text += chunk
             result_placeholder.markdown(full_text)
     except Exception as e:
+        logger.exception("Analysis failed: game_id=%s", g.get("game_id"))
         st.error(f"분석 실패: {e}")
 
     # ── 판단 근거 데이터 ────────────────────────────────────────────

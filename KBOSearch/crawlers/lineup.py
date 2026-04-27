@@ -15,13 +15,8 @@ from bs4 import BeautifulSoup
 
 from crawlers.kbo_playwright import fetch_multiple_html
 from crawlers.player_stats import get_batter_stats, CURRENT_YEAR, PREV_YEAR
-
-BASE = "https://www.koreabaseball.com"
-
-_TEAM_RANK_URL    = f"{BASE}/Record/TeamRank/TeamRankDaily.aspx"
-_TEAM_HIT_URL     = f"{BASE}/Record/Team/Hitter/Basic2.aspx"
-_TEAM_PIT_URL     = f"{BASE}/Record/Team/Pitcher/Basic1.aspx"
-_PLAYER_HIT_URL   = f"{BASE}/Record/Player/HitterBasic/Basic2.aspx"
+from crawlers.types import LineupResponse
+from crawlers.urls import PLAYER_HITTER_URL, TEAM_HITTER_URL, TEAM_PITCHER_URL, TEAM_RANK_URL
 
 
 # ── 캐시된 원시 데이터 수집 ──────────────────────────────────────────────────
@@ -29,7 +24,7 @@ _PLAYER_HIT_URL   = f"{BASE}/Record/Player/HitterBasic/Basic2.aspx"
 @lru_cache(maxsize=4)
 def _fetch_all_raw() -> dict:
     """4개 페이지를 한 번에 수집, 전체 데이터 반환."""
-    urls = [_TEAM_RANK_URL, _TEAM_HIT_URL, _TEAM_PIT_URL, _PLAYER_HIT_URL]
+    urls = [TEAM_RANK_URL, TEAM_HITTER_URL, TEAM_PITCHER_URL, PLAYER_HITTER_URL]
     htmls = fetch_multiple_html(urls)
     rank_html, hit_html, pit_html, player_html = htmls
 
@@ -81,7 +76,7 @@ def _safe(row: list[str] | None, idx: int) -> str:
 
 # ── 공개 인터페이스 ─────────────────────────────────────────────────────────
 
-def fetch_lineup(away_team: str, home_team: str) -> dict:
+def fetch_lineup(away_team: str, home_team: str) -> LineupResponse:
     """
     두 팀의 타선 스탯 반환.
 

@@ -10,24 +10,24 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 
 from crawlers.kbo_playwright import fetch_html
-
-BASE = "https://www.koreabaseball.com"
+from crawlers.types import RecentGame, ScheduleResult
+from crawlers.urls import schedule_url
 
 
 @lru_cache(maxsize=12)
-def _fetch_month_games(year_month: str) -> list[dict]:
+def _fetch_month_games(year_month: str) -> list[ScheduleResult]:
     """
     해당 연월(YYYYMM)의 완료된 전체 경기 결과 파싱.
     Returns: [{"date", "away", "away_score", "home", "home_score"}]
     """
     # 해당 달 1일로 요청 (KBO는 달력 기준으로 전체 월 반환)
     g_date = year_month + "01"
-    url = f"{BASE}/Schedule/Schedule.aspx?gameDate={g_date}"
+    url = schedule_url(g_date)
     html = fetch_html(url)
-    return _parse_results(html)
+    return _parse_results(html, int(year_month[:4]))
 
 
-def _parse_results(html: str) -> list[dict]:
+def _parse_results(html: str, year: int) -> list[ScheduleResult]:
     """완료된 경기 결과만 파싱."""
     if not html:
         return []
@@ -42,11 +42,10 @@ def _parse_results(html: str) -> list[dict]:
     for row in table.find_all("tr")[1:]:
         day_td = row.find("td", class_="day")
         if day_td:
-            # "04.24(금)" → "2026-04-24" (연도는 현재 연도로 가정)
+            # "04.24(금)" -> "2026-04-24" (조회 대상 연도 사용)
             day_text = day_td.get_text(strip=True)
             m = re.match(r"(\d{2})\.(\d{2})", day_text)
             if m:
-                year = datetime.today().year
                 current_date = f"{year}-{m.group(1)}-{m.group(2)}"
 
         play_td = row.find("td", class_="play")
@@ -93,7 +92,7 @@ def fetch_recent_games(
     team_name: str,
     n: int = 5,
     before_date: str | None = None,
-) -> list[dict]:
+) -> list[RecentGame]:
     """
     특정 팀의 최근 n경기 결과 반환 (before_date 하루 전까지).
 
