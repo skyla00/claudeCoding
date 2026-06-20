@@ -51,7 +51,11 @@ def fetch_pitcher_stats(game_id: str) -> PitcherStatsResponse:
     if game_id in _stats_cache:
         result = _stats_cache[game_id]
         # history가 없으면 이 시점에 추가 (캐시 이후에 player_stats가 준비된 경우)
-        if result.get("away") and "history" not in result["away"]:
+        needs_history = (
+            (result.get("away") and "history" not in result["away"]) or
+            (result.get("home") and "history" not in result["home"])
+        )
+        if needs_history:
             result = _attach_history(result)
             _stats_cache[game_id] = result
         return result

@@ -85,7 +85,6 @@ if st.session_state.selected_game is not None:
 
     st.divider()
     st.subheader(f"⚾ {g['away']} ({g['away_pitcher']}) vs {g['home']} ({g['home_pitcher']})")
-    st.caption(f"선발: {g['away']} {g['away_pitcher']} / {g['home']} {g['home_pitcher']}")
 
     with st.spinner("데이터 수집 중..."):
         try:
@@ -114,7 +113,7 @@ if st.session_state.selected_game is not None:
         st.error(f"분석 실패: {e}")
 
     # ── 판단 근거 데이터 ────────────────────────────────────────────
-    stats_date = datetime.today().strftime("%Y.%m.%d")
+    stats_date = date.strftime("%Y.%m.%d")
     with st.expander(f"📊 판단 근거 데이터 보기  (스탯 기준: {stats_date})", expanded=False):
         tab_pitcher, tab_lineup, tab_recent = st.tabs(["선발 투수", "팀 타선", "최근 5경기"])
 

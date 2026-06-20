@@ -147,16 +147,17 @@ def fetch_lineup(away_team: str, home_team: str) -> LineupResponse:
 
         key_hitters = []
         candidates = []
-        for row in player_rows[1:]:
-            if len(row) <= max(name_idx, tm_idx, ops2_idx):
-                continue
-            if row[tm_idx] != team:
-                continue
-            try:
-                ops_val = float(row[ops2_idx])
-                candidates.append({"name": row[name_idx], "OPS": row[ops2_idx], "_ops": ops_val})
-            except (ValueError, IndexError):
-                continue
+        if -1 not in (name_idx, tm_idx, ops2_idx):
+            for row in player_rows[1:]:
+                if len(row) <= max(name_idx, tm_idx, ops2_idx):
+                    continue
+                if row[tm_idx] != team:
+                    continue
+                try:
+                    ops_val = float(row[ops2_idx])
+                    candidates.append({"name": row[name_idx], "OPS": row[ops2_idx], "_ops": ops_val})
+                except (ValueError, IndexError):
+                    continue
 
         candidates.sort(key=lambda x: x["_ops"], reverse=True)
         key_hitters = []

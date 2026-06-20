@@ -19,3 +19,4 @@ https://velog.io/@skyla00/posts
 | 2026-04-21 | Velog 자동 포스팅 구현 (blog-write/) — refresh_token 인증 + GraphQL v3 포스팅 + /blog /push 커스텀 커맨드 정립 |
 | 2026-04-24 | KBOSearch 고도화 — 투수 스탯 pre-cache로 로딩 단축, 연도별 선수 스탯(player_stats.py) 신규 수집, ASP.NET UpdatePanel 타이밍 버그 수정, 판단 근거 UI에 2025·2026 스탯 병기 |
 | 2026-04-27 | KBOSearch 리팩터링 — urls.py·types.py·gamecenter.py 분리, 병렬 수집(12s→3.5s), config.py+provider.py로 AI 프로바이더 추상화, 로깅 추가, docs 3종 작성 |
+| 2026-06-20 | KBOSearch P4 버그 수정 — lineup.py -1 인덱스 guard, pitcher.py home 투수 history 누락, app.py 중복 caption 제거, 스탯 기준 날짜 수정 |
